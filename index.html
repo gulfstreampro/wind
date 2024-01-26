@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>My 3D Model</title>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #122334;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+
+    }
+
+    #loading-screen img {
+      width: 145px;
+      height: 115px;
+      animation: rotate 2s linear infinite;
+    }
+
+    #loading-progress {
+      width: 120px;
+      height: 20px;
+      margin-top: 10px;
+      background-color: #fff;
+      position: relative;
+    }
+
+    @keyframes rotate {
+      from {
+        transform: rotateY(-90deg);
+      }
+
+      to {
+        transform: rotateY(90deg);
+      }
+  </style>
+</head>
+
+<body>
+  <div id="loading-screen">
+    <img src="./textures/loading1.png" alt="Loading...">
+    <div id="loading-progress">
+      <div id="loading-progress-fill"></div>
+    </div>
+  </div>
+  <div id="container"></div>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/loaders/RGBELoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/pmrem/PMREMGenerator.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/pmrem/PMREMCubeUVPacker.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.min.js"></script>
+
+  <script>
+    var camera, scene, renderer, controls, model;
+    var zoomSpeed = 0.1;
+    var maxZoomIn = 1, maxZoomOut = 10;
+    var paddingLimit = 0.5;
+    var rotationSpeed = 0.01;
+    init();
+    animate();
+
+    function init() {
+      // create camera with perspective view
+      camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 5.6;
+
+      // create scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x122334);
+
+      // add model
+      var loader = new THREE.GLTFLoader();
+      loader.load('./model/wind.gltf', function (gltf) {
+        model = gltf.scene;
+        model.scale.set(0.3, 0.3, 0.3);
+        // add emissive materials to the model and the tracks
+        model.traverse((child) => {
+          if (child.isMesh) {
+            const emissiveMaterial = new THREE.MeshStandardMaterial({
+              map: child.material.map,
+              emissiveMap: child.material.map,
+              roughnessMap: child.material.roughnessMap,
+              normalMap: child.material.normalMap,
+              metalness: 0.75,
+              roughness: 0.5
+            });
+            child.material = emissiveMaterial;
+          }
+        });
+        model.traverse((child) => {
+          if (child.isMesh && child.name === 'Cylinder_1') {
+            const emissiveMaterial = new THREE.MeshStandardMaterial({
+              map: child.material.map,
+              emissiveMap: child.material.map,
+              roughnessMap: child.material.roughnessMap,
+              normalMap: child.material.normalMap,
+              metalness: 0.75,
+              roughness: 0.8,
+              normalScale: new THREE.Vector2(0.28, 0.28) // Increase the intensity of the normal map
+            });
+            child.material = emissiveMaterial;
+          }
+        });
+
+        model.traverse((child) => {
+          if (child.isMesh && child.name === 'Sweep_3_2') {
+            const emissiveMaterial = new THREE.MeshStandardMaterial({
+              map: child.material.map,
+              emissiveMap: child.material.map,
+              roughnessMap: child.material.roughnessMap,
+              normalMap: child.material.normalMap,
+              metalness: 0.9,
+              roughness: 0.1,
+              normalScale: new THREE.Vector2(0.28, 0.28) // Increase the intensity of the normal map
+            });
+            child.material = emissiveMaterial;
+          }
+        });
+        scene.add(model);
+        // load HDR environment map
+        new THREE.RGBELoader()
+          .setDataType(THREE.UnsignedByteType)
+          .setPath('./textures/')
+          .load('e12.hdr', function (texture) {
+            var envMap = new THREE.PMREMGenerator(renderer)
+              .fromEquirectangular(texture)
+              .texture;
+            scene.environment = envMap;
+            model.traverse(function (child) {
+              if (child.isMesh) {
+                child.material.envMap = envMap;
+                child.material.envMapIntensity = 1; // adjust the intensity of the environment map
+                child.material.needsUpdate = true;
+              }
+            });
+            texture.dispose();
+            envMap.dispose();
+          });
+
+        // hide the loading screen and show the rest of the page
+        var loadingScreen = document.getElementById('loading-screen');
+        loadingScreen.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      });
+
+      // add renderer
+      renderer = new THREE.WebGLRenderer();
+      renderer = new THREE.WebGLRenderer({antialias: true});
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // keep track of initial camera position
+      var initialCameraPosition = camera.position.clone();
+
+      // add camera controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.25;
+      controls.enableZoom = true;
+      controls.minDistance = 1.9;
+      controls.maxDistance = 50;
+      controls.minPolarAngle = 0;
+      controls.enablePan = false; // disable panning
+
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 8;
+      controls.enableDamping = true;
+
+    }
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    addEventListener('resize', onWindowResize)
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+
+</html>
